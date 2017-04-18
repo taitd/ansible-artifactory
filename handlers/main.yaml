@@ -1,0 +1,9 @@
+---
+
+- name: Restart Artifactory server
+  service:
+    name: "{{ artifactory_service }}"
+    state: restarted
+  when: >
+    artifactory_service_started is not defined or
+    not artifactory_service_started.changed

@@ -1,0 +1,132 @@
+---
+
+- name: Test distribution
+  assert:
+    that: >
+      ansible_os_family == 'RedHat'
+
+- name: Add YUM repo
+  yum_repository:
+    name: artifactory
+    description: Artifactory YUM repo
+    baseurl: "{{ artifactory_yumrepo_url }}"
+    gpgcheck: no
+    params: "{{ artifactory_yumrepo_params }}"
+  tags:
+    - artifactory_pkg
+
+- name: Install additional dependencies packages
+  package:
+    name: "{{ item }}"
+  with_items: "{{ artifactory_deps_pkgs }}"
+  tags:
+    - artifactory_pkg
+
+- name: Install Artifactory
+  package:
+    name: "{{ artifactory_pkg }}"
+  notify:
+    - Restart Artifactory server
+  tags:
+    - artifactory_pkg
+
+- name: Copy artifactory licence file
+  copy:
+    dest: "{{ artifactory_conf_dir }}/artifactory.lic"
+    content: "{{ artifactory_license }}"
+    owner: artifactory
+    group: artifactory
+    mode: 0640
+  when: >
+    artifactory_license != None
+  tags:
+    - artifactory_license
+    - artifactory_conf
+
+- name: Create PostgreSQL DB
+  postgresql_db:
+    name: "{{ artifactory_db_name }}"
+    login_user: "{{ artifactory_db_login_user }}"
+    login_password: "{{ artifactory_db_login_password }}"
+    login_host: "{{ artifactory_db_host }}"
+    port: "{{ artifactory_db_port }}"
+  register: artifactory_db_pgsql_created
+  when: artifactory_db_engine == 'postgresql'
+  tags:
+    - artifactory_db
+
+- name: Create PostgreSQL user
+  postgresql_user:
+    name: "{{ artifactory_db_user }}"
+    db: "{{ artifactory_db_name }}"
+    password: "{{ artifactory_db_password }}"
+    priv: ALL
+    login_user: "{{ artifactory_db_login_user }}"
+    login_password: "{{ artifactory_db_login_password }}"
+    login_host: "{{ artifactory_db_host }}"
+    port: "{{ artifactory_db_port }}"
+  when: artifactory_db_engine == 'postgresql'
+  tags:
+    - artifactory_db
+
+- name: Create MySQL DB
+  mysql_db:
+    name: "{{ artifactory_db_name }}"
+    login_host: "{{ artifactory_db_host }}"
+    login_port: "{{ artifactory_db_port }}"
+    login_user: "{{ artifactory_db_login_user }}"
+    login_password: "{{ artifactory_db_login_password }}"
+    encoding: utf8
+  register: artifactory_db_mysql_created
+  when: artifactory_db_engine == 'mysql'
+  tags:
+    - artifactory_db
+
+- name: Create MySQL user
+  mysql_user:
+    login_host: "{{ artifactory_db_host }}"
+    login_port: "{{ artifactory_db_port }}"
+    login_user: "{{ artifactory_db_login_user }}"
+    login_password: "{{ artifactory_db_login_password }}"
+    name: "{{ artifactory_db_user }}"
+    password: "{{ artifactory_db_password }}"
+    priv: "{{ artifactory_db_name }}.*:ALL"
+  when: artifactory_db_engine == 'mysql'
+  tags:
+    - artifactory_db
+
+- name: Symlink JDBC driver to be found by Tomcat
+  file:
+    src: "{{ artifactory_db_driver_location }}"
+    dest: "{{ artifactory_db_driver_destination }}"
+    state: link
+  when: artifactory_db_engine in ['postgresql', 'mysql']
+  tags:
+    - artifactory_db
+
+- name: Configure DB properties file
+  template:
+    src: db.properties.j2
+    dest: "{{ artifactory_conf_dir }}/db.properties"
+    owner: artifactory
+    group: artifactory
+    mode: 0640
+  when: >
+    artifactory_db_engine in ['postgresql', 'mysql']
+  notify:
+    - Restart Artifactory server
+
+- name: Make sure the service is enabled
+  service:
+    name: "{{ artifactory_service }}"
+    enabled: yes
+  tags:
+    - artifactory_service
+
+- name: Make sure the service is running
+  service:
+    name: "{{ artifactory_service }}"
+    state: started
+  register: artifactory_service_started
+  tags:
+    - artifactory_service
