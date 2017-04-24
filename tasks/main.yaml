@@ -19,6 +19,8 @@
   package:
     name: "{{ item }}"
   with_items: "{{ artifactory_deps_pkgs }}"
+  notify:
+    - Restart Artifactory server
   tags:
     - artifactory_pkg
 
@@ -39,6 +41,8 @@
     mode: 0640
   when: >
     artifactory_license != None
+  notify:
+    - Restart Artifactory server
   tags:
     - artifactory_license
     - artifactory_conf
@@ -101,6 +105,8 @@
     dest: "{{ artifactory_db_driver_destination }}"
     state: link
   when: artifactory_db_engine in ['postgresql', 'mysql']
+  notify:
+    - Restart Artifactory server
   tags:
     - artifactory_db
 
@@ -115,6 +121,8 @@
     artifactory_db_engine in ['postgresql', 'mysql']
   notify:
     - Restart Artifactory server
+  tags:
+    - artifactory_db
 
 - name: Make sure the service is enabled
   service:
